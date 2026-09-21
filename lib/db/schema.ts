@@ -1,26 +1,29 @@
+/**
+ * Production (Postgres) mirror of ./schema.ts.
+ *
+ * Drizzle does not have a single dialect-agnostic schema format, so this is
+ * a deliberate, hand-kept mirror of the SQLite schema used in dev — same
+ * table names, same columns, same indexes — targeting `drizzle-orm/pg-core`
+ * instead. Swap `lib/db/client.ts` -> `lib/db/client.pg.ts` and this file
+ * becomes the active schema (see DEPLOYMENT.md, "Switching to Postgres").
+ *
+ * Only the column *type constructors* differ from schema.ts:
+ *   - text(...).primaryKey()  -> same
+ *   - integer(mode: "timestamp") -> timestamp(...)
+ *   - integer(mode: "boolean")   -> boolean(...)
+ * Table/column names, relations, and application code are unchanged.
+ */
+
 import {
-  sqliteTable,
+  pgTable,
   text,
+  timestamp,
+  boolean,
   integer,
   primaryKey,
   index,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
-import { relations, sql } from "drizzle-orm";
-
-/**
- * NOTE ON DATABASE PORTABILITY
- * ----------------------------
- * This schema is written against Drizzle's SQLite dialect for local dev
- * (see ARCHITECTURE.md / README "Database" section for why Drizzle was
- * substituted for Prisma). The column types used here (text ids, integer
- * timestamps, integer-as-boolean) are intentionally chosen because they
- * map cleanly to `drizzle-orm/pg-core` for a production Postgres schema.
- * `lib/db/schema.pg.ts` contains the Postgres mirror used in production
- * (see that file + DEPLOYMENT.md).
- */
-
-const now = () => sql`(unixepoch())`;
+} from "drizzle-orm/pg-core";
 
 function id(name = "id") {
   return text(name)
@@ -28,21 +31,17 @@ function id(name = "id") {
     .$defaultFn(() => crypto.randomUUID());
 }
 
-// ---------------------------------------------------------------------------
-// Auth.js (NextAuth) required tables
-// ---------------------------------------------------------------------------
-
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: id(),
   name: text("name"),
   email: text("email").unique(),
-  emailVerified: integer("email_verified", { mode: "timestamp" }),
+  emailVerified: timestamp("email_verified"),
   image: text("image"),
   githubUsername: text("github_username"),
-  createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const accounts = sqliteTable(
+export const accounts = pgTable(
   "accounts",
   {
     userId: text("user_id")
@@ -51,8 +50,6 @@ export const accounts = sqliteTable(
     type: text("type").notNull(),
     provider: text("provider").notNull(),
     providerAccountId: text("provider_account_id").notNull(),
-    // access_token is stored server-side only; never returned to the client.
-    // See lib/github/token.ts for the single choke point that reads it.
     refresh_token: text("refresh_token"),
     access_token: text("access_token"),
     expires_at: integer("expires_at"),
@@ -67,52 +64,48 @@ export const accounts = sqliteTable(
   ],
 );
 
-export const sessions = sqliteTable("sessions", {
+export const sessions = pgTable("sessions", {
   sessionToken: text("session_token").primaryKey(),
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  expires: integer("expires", { mode: "timestamp" }).notNull(),
+  expires: timestamp("expires").notNull(),
 });
 
-export const verificationTokens = sqliteTable(
+export const verificationTokens = pgTable(
   "verification_tokens",
   {
     identifier: text("identifier").notNull(),
     token: text("token").notNull(),
-    expires: integer("expires", { mode: "timestamp" }).notNull(),
+    expires: timestamp("expires").notNull(),
   },
   (t) => [primaryKey({ columns: [t.identifier, t.token] })],
 );
 
-// ---------------------------------------------------------------------------
-// Learning domain
-// ---------------------------------------------------------------------------
-
-export const goals = sqliteTable(
+export const goals = pgTable(
   "goals",
   {
     id: id(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    title: text("title").notNull(), // e.g. "Android Pentesting"
+    title: text("title").notNull(),
     description: text("description"),
-    durationDays: integer("duration_days").notNull(), // 30 / 90 / 180 / 365 / custom
-    startDate: integer("start_date", { mode: "timestamp" }).notNull(),
-    targetDate: integer("target_date", { mode: "timestamp" }).notNull(),
+    durationDays: integer("duration_days").notNull(),
+    startDate: timestamp("start_date").notNull(),
+    targetDate: timestamp("target_date").notNull(),
     dailyTaskTarget: integer("daily_task_target").notNull().default(2),
     status: text("status", { enum: ["active", "completed", "archived"] })
       .notNull()
       .default("active"),
-    isSeed: integer("is_seed", { mode: "boolean" }).notNull().default(false),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
-    updatedAt: integer("updated_at", { mode: "timestamp" }).default(now()),
+    isSeed: boolean("is_seed").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
   },
   (t) => [index("goals_user_id_idx").on(t.userId)],
 );
 
-export const milestones = sqliteTable(
+export const milestones = pgTable(
   "milestones",
   {
     id: id(),
@@ -121,14 +114,14 @@ export const milestones = sqliteTable(
       .references(() => goals.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description"),
-    monthIndex: integer("month_index").notNull(), // 1-based month within the goal
+    monthIndex: integer("month_index").notNull(),
     orderIndex: integer("order_index").notNull().default(0),
-    deadline: integer("deadline", { mode: "timestamp" }),
+    deadline: timestamp("deadline"),
     status: text("status", { enum: ["pending", "in_progress", "completed"] })
       .notNull()
       .default("pending"),
-    isSeed: integer("is_seed", { mode: "boolean" }).notNull().default(false),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
+    isSeed: boolean("is_seed").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [
     index("milestones_goal_id_idx").on(t.goalId),
@@ -136,7 +129,7 @@ export const milestones = sqliteTable(
   ],
 );
 
-export const tasks = sqliteTable(
+export const tasks = pgTable(
   "tasks",
   {
     id: id(),
@@ -151,21 +144,21 @@ export const tasks = sqliteTable(
     }),
     title: text("title").notNull(),
     description: text("description"),
-    category: text("category"), // e.g. "Static Analysis"
+    category: text("category"),
     difficulty: text("difficulty", { enum: ["easy", "medium", "hard"] })
       .notNull()
       .default("medium"),
     estimatedMinutes: integer("estimated_minutes").notNull().default(30),
-    scheduledDate: integer("scheduled_date", { mode: "timestamp" }).notNull(),
+    scheduledDate: timestamp("scheduled_date").notNull(),
     status: text("status", {
       enum: ["pending", "in_progress", "completed", "skipped"],
     })
       .notNull()
       .default("pending"),
     orderIndex: integer("order_index").notNull().default(0),
-    isSeed: integer("is_seed", { mode: "boolean" }).notNull().default(false),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
-    updatedAt: integer("updated_at", { mode: "timestamp" }).default(now()),
+    isSeed: boolean("is_seed").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
   },
   (t) => [
     index("tasks_user_date_idx").on(t.userId, t.scheduledDate),
@@ -174,10 +167,7 @@ export const tasks = sqliteTable(
   ],
 );
 
-// A TaskCompletion is the append-only record of *what actually happened*.
-// It is intentionally separate from `tasks.status` so re-opening/re-completing
-// a task (or a retried sync) never loses the original learning record.
-export const taskCompletions = sqliteTable(
+export const taskCompletions = pgTable(
   "task_completions",
   {
     id: id(),
@@ -187,14 +177,11 @@ export const taskCompletions = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Idempotency key: deterministic hash of (taskId, completedDate) so a
-    // double-click / refresh / retry can never create a second completion
-    // row for the same task on the same day. See lib/journal/idempotency.ts.
     idempotencyKey: text("idempotency_key").notNull(),
     whatLearned: text("what_learned").notNull(),
     notes: text("notes"),
-    resources: text("resources"), // JSON string array of URLs
-    completedAt: integer("completed_at", { mode: "timestamp" }).default(now()),
+    resources: text("resources"),
+    completedAt: timestamp("completed_at").defaultNow(),
   },
   (t) => [
     uniqueIndex("task_completions_idempotency_idx").on(t.idempotencyKey),
@@ -203,7 +190,7 @@ export const taskCompletions = sqliteTable(
   ],
 );
 
-export const learningResources = sqliteTable(
+export const learningResources = pgTable(
   "learning_resources",
   {
     id: id(),
@@ -215,14 +202,12 @@ export const learningResources = sqliteTable(
     }),
     title: text("title"),
     url: text("url").notNull(),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
+    createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [index("learning_resources_user_idx").on(t.userId)],
 );
 
-// One JournalEntry per user per calendar day. Regenerated (not duplicated)
-// whenever a new completion lands for that day — see lib/journal/generate.ts.
-export const journalEntries = sqliteTable(
+export const journalEntries = pgTable(
   "journal_entries",
   {
     id: id(),
@@ -232,13 +217,13 @@ export const journalEntries = sqliteTable(
     goalId: text("goal_id").references(() => goals.id, {
       onDelete: "set null",
     }),
-    date: text("date").notNull(), // "YYYY-MM-DD", used for uniqueness + filenames
+    date: text("date").notNull(),
     markdown: text("markdown").notNull(),
     tasksCompletedCount: integer("tasks_completed_count").notNull().default(0),
     tasksPlannedCount: integer("tasks_planned_count").notNull().default(0),
-    topics: text("topics"), // JSON string array, derived from task categories
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
-    updatedAt: integer("updated_at", { mode: "timestamp" }).default(now()),
+    topics: text("topics"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
   },
   (t) => [
     uniqueIndex("journal_user_date_idx").on(t.userId, t.date),
@@ -246,29 +231,23 @@ export const journalEntries = sqliteTable(
   ],
 );
 
-export const dailyProgress = sqliteTable(
+export const dailyProgress = pgTable(
   "daily_progress",
   {
     id: id(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    date: text("date").notNull(), // "YYYY-MM-DD"
+    date: text("date").notNull(),
     tasksPlanned: integer("tasks_planned").notNull().default(0),
     tasksCompleted: integer("tasks_completed").notNull().default(0),
     minutesLearned: integer("minutes_learned").notNull().default(0),
-    countsForStreak: integer("counts_for_streak", { mode: "boolean" })
-      .notNull()
-      .default(false),
+    countsForStreak: boolean("counts_for_streak").notNull().default(false),
   },
   (t) => [uniqueIndex("daily_progress_user_date_idx").on(t.userId, t.date)],
 );
 
-// ---------------------------------------------------------------------------
-// GitHub integration
-// ---------------------------------------------------------------------------
-
-export const githubConnections = sqliteTable("github_connections", {
+export const githubConnections = pgTable("github_connections", {
   id: id(),
   userId: text("user_id")
     .notNull()
@@ -276,10 +255,10 @@ export const githubConnections = sqliteTable("github_connections", {
     .references(() => users.id, { onDelete: "cascade" }),
   githubUserId: text("github_user_id").notNull(),
   githubUsername: text("github_username").notNull(),
-  connectedAt: integer("connected_at", { mode: "timestamp" }).default(now()),
+  connectedAt: timestamp("connected_at").defaultNow(),
 });
 
-export const githubRepositories = sqliteTable(
+export const githubRepositories = pgTable(
   "github_repositories",
   {
     id: id(),
@@ -291,16 +270,12 @@ export const githubRepositories = sqliteTable(
     }),
     owner: text("owner").notNull(),
     name: text("name").notNull(),
-    fullName: text("full_name").notNull(), // "owner/name"
+    fullName: text("full_name").notNull(),
     defaultBranch: text("default_branch").notNull().default("main"),
-    isPrivate: integer("is_private", { mode: "boolean" })
-      .notNull()
-      .default(true),
-    wasCreatedByApp: integer("was_created_by_app", { mode: "boolean" })
-      .notNull()
-      .default(false),
-    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
+    isPrivate: boolean("is_private").notNull().default(true),
+    wasCreatedByApp: boolean("was_created_by_app").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [
     uniqueIndex("github_repo_user_fullname_idx").on(t.userId, t.fullName),
@@ -308,8 +283,7 @@ export const githubRepositories = sqliteTable(
   ],
 );
 
-// One row per sync *attempt*. Append-only audit trail (Sync history, §19).
-export const githubSyncs = sqliteTable(
+export const githubSyncs = pgTable(
   "github_syncs",
   {
     id: id(),
@@ -319,7 +293,7 @@ export const githubSyncs = sqliteTable(
     repositoryId: text("repository_id")
       .notNull()
       .references(() => githubRepositories.id, { onDelete: "cascade" }),
-    date: text("date").notNull(), // which journal day this sync covers
+    date: text("date").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     status: text("status", {
       enum: ["pending", "syncing", "success", "failed"],
@@ -328,12 +302,12 @@ export const githubSyncs = sqliteTable(
       .default("pending"),
     commitMessage: text("commit_message"),
     commitSha: text("commit_sha"),
-    filesChanged: text("files_changed"), // JSON string array of paths
-    errorCode: text("error_code"), // e.g. "429", "401"
+    filesChanged: text("files_changed"),
+    errorCode: text("error_code"),
     errorMessage: text("error_message"),
     attempts: integer("attempts").notNull().default(0),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
-    completedAt: integer("completed_at", { mode: "timestamp" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    completedAt: timestamp("completed_at"),
   },
   (t) => [
     uniqueIndex("github_sync_idempotency_idx").on(t.idempotencyKey),
@@ -342,10 +316,7 @@ export const githubSyncs = sqliteTable(
   ],
 );
 
-// The pending queue (§13/§14): anything not yet successfully synced.
-// Kept separate from githubSyncs (the audit log) so "what still needs to
-// go out" is a cheap, small query instead of scanning full sync history.
-export const syncQueue = sqliteTable(
+export const syncQueue = pgTable(
   "sync_queue",
   {
     id: id(),
@@ -354,15 +325,15 @@ export const syncQueue = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     date: text("date").notNull(),
     idempotencyKey: text("idempotency_key").notNull().unique(),
-    reason: text("reason").notNull(), // "no_repo" | "github_error" | "offline" | "rate_limited"
+    reason: text("reason").notNull(),
     retryCount: integer("retry_count").notNull().default(0),
-    nextRetryAt: integer("next_retry_at", { mode: "timestamp" }),
-    createdAt: integer("created_at", { mode: "timestamp" }).default(now()),
+    nextRetryAt: timestamp("next_retry_at"),
+    createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [index("sync_queue_user_idx").on(t.userId)],
 );
 
-export const userSettings = sqliteTable("user_settings", {
+export const userSettings = pgTable("user_settings", {
   userId: text("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -377,89 +348,15 @@ export const userSettings = sqliteTable("user_settings", {
   commitMessageFormat: text("commit_message_format")
     .notNull()
     .default("Learning: {goal} — {date}"),
-  streakRequiresGithub: integer("streak_requires_github", { mode: "boolean" })
+  streakRequiresGithub: boolean("streak_requires_github")
     .notNull()
     .default(false),
-  hasCompletedOnboarding: integer("has_completed_onboarding", {
-    mode: "boolean",
-  })
+  hasCompletedOnboarding: boolean("has_completed_onboarding")
     .notNull()
     .default(false),
-  notificationsEnabled: integer("notifications_enabled", { mode: "boolean" })
-    .notNull()
-    .default(true),
+  notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
 });
 
-// ---------------------------------------------------------------------------
-// Relations (for ergonomic query building with `db.query.*`)
-// ---------------------------------------------------------------------------
-
-export const usersRelations = relations(users, ({ many, one }) => ({
-  goals: many(goals),
-  tasks: many(tasks),
-  settings: one(userSettings, {
-    fields: [users.id],
-    references: [userSettings.userId],
-  }),
-  githubConnection: one(githubConnections, {
-    fields: [users.id],
-    references: [githubConnections.userId],
-  }),
-}));
-
-export const goalsRelations = relations(goals, ({ one, many }) => ({
-  user: one(users, { fields: [goals.userId], references: [users.id] }),
-  milestones: many(milestones),
-  tasks: many(tasks),
-  repository: many(githubRepositories),
-}));
-
-export const milestonesRelations = relations(milestones, ({ one, many }) => ({
-  goal: one(goals, { fields: [milestones.goalId], references: [goals.id] }),
-  tasks: many(tasks),
-}));
-
-export const tasksRelations = relations(tasks, ({ one, many }) => ({
-  goal: one(goals, { fields: [tasks.goalId], references: [goals.id] }),
-  milestone: one(milestones, {
-    fields: [tasks.milestoneId],
-    references: [milestones.id],
-  }),
-  completions: many(taskCompletions),
-}));
-
-export const taskCompletionsRelations = relations(
-  taskCompletions,
-  ({ one }) => ({
-    task: one(tasks, {
-      fields: [taskCompletions.taskId],
-      references: [tasks.id],
-    }),
-  }),
-);
-
-export const githubRepositoriesRelations = relations(
-  githubRepositories,
-  ({ one, many }) => ({
-    user: one(users, {
-      fields: [githubRepositories.userId],
-      references: [users.id],
-    }),
-    goal: one(goals, {
-      fields: [githubRepositories.goalId],
-      references: [goals.id],
-    }),
-    syncs: many(githubSyncs),
-  }),
-);
-
-export type User = typeof users.$inferSelect;
-export type Goal = typeof goals.$inferSelect;
 export type Milestone = typeof milestones.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type TaskCompletion = typeof taskCompletions.$inferSelect;
-export type JournalEntry = typeof journalEntries.$inferSelect;
-export type GithubRepository = typeof githubRepositories.$inferSelect;
-export type GithubSync = typeof githubSyncs.$inferSelect;
-export type SyncQueueItem = typeof syncQueue.$inferSelect;
-export type UserSettings = typeof userSettings.$inferSelect;

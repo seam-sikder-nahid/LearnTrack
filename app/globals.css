@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------
+   LearnTrack design tokens.
+   Graphite/slate surfaces, amber "streak" accent, teal "synced" accent,
+   Inter for UI text, JetBrains Mono reserved for commit hashes/dates/code.
+   ------------------------------------------------------------------- */
+
+:root {
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f4f5f7;
+  --border: #e2e4e9;
+  --text: #14161b;
+  --text-muted: #5c616e;
+  --text-faint: #8b909c;
+
+  --accent-streak: #b3762c;
+  --accent-streak-bg: #fbf1e2;
+  --accent-synced: #1f7a68;
+  --accent-synced-bg: #e7f5f1;
+  --accent-pending: #a06b06;
+  --accent-pending-bg: #fdf3dc;
+  --accent-failed: #b3341f;
+  --accent-failed-bg: #fbeae7;
+  --accent-primary: #2f5b8a;
+  --accent-primary-bg: #eaf1f9;
+
+  --radius-structural: 6px;
+  --radius-interactive: 8px;
+}
+
+:root[data-theme="dark"] {
+  --surface: #14161c;
+  --surface-raised: #1a1d24;
+  --surface-sunken: #0f1115;
+  --border: #2a2e38;
+  --text: #eceef2;
+  --text-muted: #a3a8b4;
+  --text-faint: #6b7080;
+
+  --accent-streak: #e0a95c;
+  --accent-streak-bg: #2c2317;
+  --accent-synced: #4fc3a9;
+  --accent-synced-bg: #14251f;
+  --accent-pending: #e0b559;
+  --accent-pending-bg: #2b2417;
+  --accent-failed: #e17b68;
+  --accent-failed-bg: #2c1a17;
+  --accent-primary: #7aa8d9;
+  --accent-primary-bg: #182430;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #14161c;
+    --surface-raised: #1a1d24;
+    --surface-sunken: #0f1115;
+    --border: #2a2e38;
+    --text: #eceef2;
+    --text-muted: #a3a8b4;
+    --text-faint: #6b7080;
+
+    --accent-streak: #e0a95c;
+    --accent-streak-bg: #2c2317;
+    --accent-synced: #4fc3a9;
+    --accent-synced-bg: #14251f;
+    --accent-pending: #e0b559;
+    --accent-pending-bg: #2b2417;
+    --accent-failed: #e17b68;
+    --accent-failed-bg: #2c1a17;
+    --accent-primary: #7aa8d9;
+    --accent-primary-bg: #182430;
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-accent-streak: var(--accent-streak);
+  --color-accent-synced: var(--accent-synced);
+  --color-accent-pending: var(--accent-pending);
+  --color-accent-failed: var(--accent-failed);
+  --color-accent-primary: var(--accent-primary);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-primary-bg);
+  color: var(--text);
+}
